@@ -7,6 +7,7 @@ import PIL.Image
 import PIL.ImageOps
 import io
 import re
+import socket
 import tornado.gen
 import tornado.httpclient
 import tornado.httpserver
@@ -89,10 +90,17 @@ class ResizeHandler(tornado.web.RequestHandler):
         size = self._get_size(width, height)
         resample = self._get_resample_method()
 
-        # Request the image from the origin and create a PIL object.
-        request = tornado.httpclient.HTTPRequest(origin_url)
-        http_client = tornado.httpclient.AsyncHTTPClient()
-        response = yield http_client.fetch(request)
+        # Request the image from the origin. If we encounter a
+        # network-related error, we consider the origin unavailable
+        # and translate the exception into an HTTP 404.
+        try:
+            request = tornado.httpclient.HTTPRequest(origin_url)
+            http_client = tornado.httpclient.AsyncHTTPClient()
+            response = yield http_client.fetch(request)
+        except socket.gaierror:
+            raise tornado.web.HTTPError(404)
+
+        # Create a PIL object from the HTTP response body.
         img = PIL.Image.open(response.buffer)
 
         # Perform the requested operation.
